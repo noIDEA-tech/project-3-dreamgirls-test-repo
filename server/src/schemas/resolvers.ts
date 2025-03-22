@@ -1,18 +1,12 @@
-import { Review, User } from '../models/index.js';
-import { signToken, AuthenticationError } from '../utils/auth.js'; 
-
-// Define types for the arguments
+import { GraphQLError } from 'graphql';
+import { AuthContext, auth } from '../utils/auth'; //TODO: resolve issue with imports TokenUser, auth 3.18.25 njw
+import { User, Review } from '../models';
+//TODO: Define interfaces for query and mutation arguments
 interface AddUserArgs {
-  input:{
+  input: {
     username: string;
     email: string;
-    password: string;
   }
-}
-
-interface LoginUserArgs {
-  email: string;
-  password: string;
 }
 
 interface UserArgs {
@@ -23,152 +17,384 @@ interface ReviewArgs {
   reviewId: string;
 }
 
+interface LoginArgs{
+  input: {
+    email: string;
+    username: string;
+  }
+}
+
+interface LocationInput {
+  type: string;
+  coordinates: number[];
+  address?: string; 
+}
+
+interface ReviewInput {
+  title: string;
+  description: string;
+  reviewType: string;
+  location: LocationInput;
+  severity: number;
+}
+
 interface AddReviewArgs {
-  input:{
-    reviewText: string;
-    reviewAuthor: string;
+  input: {
+    reviewData: ReviewInput;
+  }
+}
+
+interface UpdateReviewArgs {
+  reviewId: string;
+  input: {
+    reviewData: ReviewInput
   }
 }
 
 interface AddCommentArgs {
-  reviewId: string;
-  commentText: string;
+  reviewId: string; 
+  input: {
+    commentText: string;
+  }
 }
 
 interface RemoveCommentArgs {
   reviewId: string;
-  commentId: string;
+  input: {
+    commentId: string;
+  }
 }
 
 const resolvers = {
-  Query: {
-    users: async () => {
-      return User.find().populate('reviews');
-    },
-    user: async (_parent: any, { username }: UserArgs) => {
-      return User.findOne({ username }).populate('reviews');
-    },
-    reviews: async () => {
-      return await Review.find().sort({ createdAt: -1 });
-    },
-    review: async (_parent: any, { reviewId }: ReviewArgs) => {
-      return await Review.findOne({ _id: reviewId });
-    },
-    // Query to get the authenticated user's information
-    // The 'me' query relies on the context to check if the user is authenticated
-    me: async (_parent: any, _args: any, context: any) => {
-      // If the user is authenticated, find and return the user's information along with their thoughts
-      if (context.user) {
-        return User.findOne({ _id: context.user._id }).populate('reviews');
-      }
-      // If the user is not authenticated, throw an AuthenticationError
-      throw new AuthenticationError('Could not authenticate user.');
-    },
-  },
-  Mutation: {
-    addUser: async (_parent: any, { input }: AddUserArgs) => {
-      // Create a new user with the provided username, email, and password
-      const user = await User.create({ ...input });
-    
-      // Sign a token with the user's information
-      const token = signToken(user.username, user.email, user._id);
-    
-      // Return the token and the user
-      return { token, user };
-    },
-    
-    login: async (_parent: any, { email, password }: LoginUserArgs) => {
-      // Find a user with the provided email
-      const user = await User.findOne({ email });
-    
-      // If no user is found, throw an AuthenticationError
-      if (!user) {
-        throw new AuthenticationError('Could not authenticate user.');
-      }
-    
-      // Check if the provided password is correct
-      const correctPw = await user.isCorrectPassword(password);
-    
-      // If the password is incorrect, throw an AuthenticationError
-      if (!correctPw) {
-        throw new AuthenticationError('Could not authenticate user.');
-      }
-    
-      // Sign a token with the user's information
-      const token = signToken(user.username, user.email, user._id);
-    
-      // Return the token and the user
-      return { token, user };
-    },
-    addReview: async (_parent: any, { input }: AddReviewArgs, context: any) => {
-      if (context.user) {
-        const review = await Review.create({ ...input });
+    Query: {
+      //TODO: update/define auth.checkAuth with our own function
+        //get logged in user
+        me: async (_: any, __: any, context: AuthContext) => {
+            const user = auth.checkAuth(context);
+            return User.findOne({ _id: user._id }).populate('reviews');
+        },
 
-        await User.findOneAndUpdate(
-          { _id: context.user._id },
-          { $addToSet: { reviews: review._id } }
-        );
+        //get all users
+        users: async () => {
+            return User.find().populate('reviews');
+        },
 
-        return review;
-      }
-      throw AuthenticationError;
-      ('You need to be logged in!');
-    },
-    addComment: async (_parent: any, { reviewId, commentText }: AddCommentArgs, context: any) => {
-      if (context.user) {
-        return Review.findOneAndUpdate(
-          { _id: reviewId },
-          {
-            $addToSet: {
-              comments: { commentText, commentAuthor: context.user.username },
-            },
-          },
-          {
-            new: true,
-            runValidators: true,
-          }
-        );
-      }
-      throw AuthenticationError;
-    },
-    removeReview: async (_parent: any, { reviewId }: ReviewArgs, context: any) => {
-      if (context.user) {
-        const review = await Review.findOneAndDelete({
-          _id: reviewId,
-          reviewAuthor: context.user.username,
-        });
+        //get a user by username
+        user: async (_: any, { username }: UserArgs) => {
+            return User.findOne({ username }).populate('reviews');
+        },
 
-        if(!review){
-          throw AuthenticationError;
-        }
+        //get all reviews 
+        reviews: async () => {
+            return Review.find().sort({ createdAt: -1 }).populate('reviewedBy');
+        },
 
-        await User.findOneAndUpdate(
-          { _id: context.user._id },
-          { $pull: { reviews: review._id } }
-        );
+        //get a single review by ID
+        review: async (_: any, { reviewId }: ReviewArgs) => {
+            return Review.findOne({ _id: reviewId })
+              .populate('reviewedBy')
+              .populate({
+                path: 'comments.commentAuthor',
+                model: 'User',
+            });
+        },
 
-        return review;
-      }
-      throw AuthenticationError;
-    },
-    removeComment: async (_parent: any, { reviewId, commentId }: RemoveCommentArgs, context: any) => {
-      if (context.user) {
-        return Review.findOneAndUpdate(
-          { _id: reviewId },
-          {
-            $pull: {
-              comments: {
-                _id: commentId,
-                commentAuthor: context.user.username,
+        //get all reviews by a specific user
+        reviewsByUser: async (_: any, { username }: UserArgs) => {
+            const user = await User.findOne({ username });
+            if (!user) {
+                throw new GraphQLError('User not found',  {
+                    extensions: { code: 'USER_NOT_FOUND' },
+                });
+            }
+
+            return Review.find({ reviewedBy: user._id })
+            .sort({ createdAt: -1 })
+            .populate('reviewedBy');
+        },
+
+        //get reviews near specific location
+        reviewsByLocation: async (
+            _: any, 
+            { longitude, latitude, distance }: { longitude: number, latitude: number, distance: number }
+          ) => {
+            return Review.find({
+              location: {
+                $near: {
+                  $geometry: {
+                    type: 'Point',
+                    coordinates: [longitude, latitude],
+                  },
+                  $maxDistance: distance, // in meters
+                },
               },
-            },
+            })
+              .sort({ createdAt: -1 })
+              .populate('reviewedBy');
+        },
+    },
+
+    Mutation: {
+        //user authentication mutations
+        addUser: async (
+            _parent: any,
+            { input }: AddUserArgs
+        ) =>  {
+            //create user
+            const user = await User.create({...input});
+            //sign a JWT
+            const token = auth.signToken({_id: user.id, username: user.username, email: user.email});
+            // Return an Auth object
+            return { token, user };
+         },
+
+         login: async (
+            _: any, 
+            { input }: LoginArgs
+          ) => {
+            // Find the user
+            const {username, email} = input;
+            const user = await User.findOne({username });
+            if (!user) {
+              throw new GraphQLError('No user found with this email address', {
+                extensions: { code: 'USER_NOT_FOUND' },
+              });
+            }
+            
+            // Check password
+            // const correctPw = await user.isPasswordValid(password);
+            // if (!correctPw) {
+            //   throw new GraphQLError('Incorrect credentials', {
+            //     extensions: { code: 'INCORRECT_CREDENTIALS' },
+            //   });
+            // }
+
+            //sign a JWT
+            const token = auth.signToken({_id: user.id, username: user.username, email: user.email});
+            // return an Auth object
+            return { token, user };
+        },
+
+        //review mutations
+        addReview: async (
+            _: any,
+            { input }: AddReviewArgs, 
+            context: AuthContext
+        ) => {
+            const user = auth.checkAuth(context);
+
+            // create the review
+            const review = await Review.create({
+                ...input.reviewData,
+                reviewedBy: user._id,
+            });    
+
+            //add review to user's reviews
+            await User.findByIdAndUpdate(
+                user._id,
+                { $push: { reviews: review._id } },
+                { new: true }
+            );
+
+            return review.populate('reviewedBy');
+        },
+
+        updateReview: async (
+            _: any,
+            { reviewId, input }: UpdateReviewArgs,
+            context: AuthContext
+        ) => {
+            const user = auth.checkAuth(context);
+
+            //find reviedw and check if user is the creator
+            const review = await Review.findById(reviewId);
+            if (!review) {
+                throw new GraphQLError('Review not found', {
+                    extensions: { code: 'REVIEW_NOT_FOUND' },
+                });
+            }
+
+            if (review.reviewedBy.toString() !== user._id) {
+                throw new GraphQLError('Not authorized to update this review', {
+                    extensions: { code: 'UNAUTHORIZED' },
+                });
+            }
+ 
+            //update the review
+            const updatedReview = await Review.findByIdAndUpdate(
+                reviewId,
+                { ...input.reviewData },
+                { new: true }
+            ).populate('reviewedBy');
+
+            return updatedReview;
+        },
+
+        removeReview: async (
+            _: any,
+            { reviewId }: ReviewArgs,
+            context: AuthContext
+        ) => {
+            const user = auth.checkAuth(context);
+
+            // find review and check if user is the creator
+            const review = await Review.findById(reviewId);
+            if (!review) {
+                throw new GraphQLError('Review not found', {
+                    extensions: { code: 'REVIEW_NOT_FOUND' },
+                });
+            }
+
+            if (review.reviewedBy.toString() !==user._id) {
+                throw new GraphQLError('Not authorized to delete this review', {
+                    extensions: { code: 'UNAUTHORIZED' },
+                });
+            }
+
+            //delete the review
+            await Review.findByIdAndDelete(reviewId);
+
+            // remove review from user's reviews
+            await User.findByIdAndUpdate(
+                user._id,
+                { $pull: { reviews: reviewId } }
+            );
+
+            return review;
+        },
+
+        verifyReview: async (
+            _: any,
+            { reviewId }: ReviewArgs,
+            context: AuthContext
+        ) => {
+            auth.checkAuth(context);
+
+            //NOTE: In a real app, we might want to add admin-only validation here
+
+            // update the review verification status
+            const updatedReview = await Review.findByIdAndUpdate(
+                reviewId,
+                { verified: true },
+                { new: true }
+            ).populate('reviewedBy');
+
+            return updatedReview;
+        },
+
+        // vote mutations
+        upvoteReview: async (
+            _: any,
+            { reviewId }: ReviewArgs,
+            context: AuthContext
+        ) => {
+            auth.checkAuth(context);
+
+            // increment upvotes
+            const updatedReview = await Review.findByIdAndUpdate(
+                reviewId,
+                { $inc: { upvotes: 1 } },
+                { new: true }
+            ).populate('reviewedBy');
+
+            return updatedReview;
+        },
+
+        downvoteReview: async (
+            _: any,
+            { reviewId }: ReviewArgs,
+            context: AuthContext
+        ) => {
+            auth.checkAuth(context);
+
+            // increment downvotes
+            const updatedReview = await Review.findByIdAndUpdate(
+                reviewId,
+                { $inc: { downvotes: 1 } },
+                { new: true }
+            ).populate('reviewedBy');
+
+            return updatedReview;
+        },
+// TO DO: FINISH UPDATING ARGUMENTS WITH INTERFACES
+        // comment mutations
+        addComment: async (
+            _: any, 
+            { reviewId, input }: AddCommentArgs, 
+            context: AuthContext
+          ) => {
+            const user = auth.checkAuth(context);
+            
+            // Add comment to review
+            const updatedReview = await Review.findByIdAndUpdate(
+              reviewId,
+              {
+                $push: {
+                  comments: { commentText: input.commentText, commentAuthor: user._id },
+                },
+              },
+              { new: true }
+            )
+              .populate('reviewedBy')
+              .populate({
+                path: 'comments.commentAuthor',
+                model: 'User',
+              });
+            
+            return updatedReview;
           },
-          { new: true }
-        );
+          
+          removeComment: async (
+            _: any, 
+            { reviewId, input }: RemoveCommentArgs, 
+            context: AuthContext
+          ) => {
+            const user = auth.checkAuth(context);
+            
+            // Find the review
+            const review = await Review.findById(reviewId);
+            if (!review) {
+              throw new GraphQLError('Review not found', {
+                extensions: { code: 'REVIEW_NOT_FOUND' },
+              });
+            }
+            
+            // Check if user is the comment author
+            //TODO: Address TypeScript error line 300 after completing data models and create MongoDB cluster(?) - 3.18.25 njw
+      const comment = review.comments?.find(
+        (c) => c._id?.toString() === input.commentId
+      );
+      
+      if (!comment) {
+        throw new GraphQLError('Comment not found', {
+          extensions: { code: 'COMMENT_NOT_FOUND' },
+        });
       }
-      throw AuthenticationError;
+      
+      if (comment.commentAuthor.toString() !== user._id) {
+        throw new GraphQLError('Not authorized to delete this comment', {
+          extensions: { code: 'UNAUTHORIZED' },
+        });
+      }
+      
+      // Remove comment from review
+      const updatedReview = await Review.findByIdAndUpdate(
+        reviewId,
+        {
+          $pull: {
+            comments: { _id: input.commentId },
+          },
+        },
+        { new: true }
+      )
+        .populate('reviewedBy')
+        .populate({
+          path: 'comments.commentAuthor',
+          model: 'User',
+        });
+      
+      return updatedReview;
     },
   },
 };
-
 export default resolvers;
