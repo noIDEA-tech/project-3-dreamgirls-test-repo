@@ -5,9 +5,8 @@ import db from './config/connection.js';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { typeDefs, resolvers } from './schemas/index.js';
-import { authenticateToken } from './utils/auth.js';
+import { authenticateToken } from './utils/auth';
 import dotenv from 'dotenv';
-
 
 // Load environment variables
 dotenv.config();

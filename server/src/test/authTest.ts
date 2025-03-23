@@ -7,11 +7,18 @@ try {
   const testEmail = 'test@example.com';
   const testId = '123456789012';
   
+  // Create a user object
+  const user = {
+    _id: testId,
+    username: testUsername,
+    email: testEmail
+  };
+  
   // Generate token
   const token = signToken(testUsername, testEmail, testId);
   
   // Validate token format
-  if (!token || typeof token !== 'string' || !token.split('.').length === 3) {
+  if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
     throw new Error('Generated token does not match JWT format');
   }
   
