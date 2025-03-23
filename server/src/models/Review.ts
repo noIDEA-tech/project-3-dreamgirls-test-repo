@@ -1,60 +1,120 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
-// Define an interface for the Thought document
-interface IComment extends Document {
-  commentText: string;
-  createdAt: Date;
+//create interface representing a review document
+interface IReview {
+    title: string;
+    description: string;
+    reviewType: string;
+    location: {
+        type: string;
+        coordinates: number[];
+        address?: string;
+    };
+    severity: number;
+    verified: boolean;
+    upvotes: number;
+    downvotes: number;
+    reviewedBy: Schema.Types.ObjectId;
+    comments?: {
+        _id: string;
+        commentText: string;
+        commentAuthor: Schema.Types.ObjectId;
+        createdAt: Date;
+    }[];
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-interface IReview extends Document {
- reviewText: string;
-  reviewAuthor: string;
-  createdAt: Date;
-  comments: IComment[];
-}
-
-// Define the schema for the Comment subdocument
-const commentSchema = new Schema<IComment>(
-  {
-    commentText: {
-      type: String,
-      required: true,
-      minlength: 1,
-      maxlength: 280,
-    },
-  },
-  {
-    _id: false,
-    toJSON: { getters: true },
-    toObject: { getters: true },
-    timestamps: true,
-  }
-);
-
-// Define the schema for the Review document
+//create schema corresponding to the document interface
 const reviewSchema = new Schema<IReview>(
-  {
-    reviewText: {
-      type: String,
-      required: true,
-      minlength: 1,
-      maxlength: 280,
-      trim: true,
+    {
+        title: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        description: {
+            type: String,
+            required: true,
+        },
+        reviewType: {
+            type: String,
+            required: true,
+            enum: ['harassment', 'theft', 'assault', 'unsafe_environment', 'other'],
+        },
+        location: {
+            type: {
+                type: String,
+                enum: ['Point'],
+                required: true,
+            },
+            coordinates: {
+                type: [Number],
+                required: true,
+            },
+            address: {
+                type: String,
+            },
+        },
+        severity: {
+            type: Number,
+            required: true,
+            min: 1,
+            max: 5,
+        },
+        verified: {
+            type: Boolean,
+            default: false,
+        },
+        upvotes: {
+            type: Number,
+            default: 0,
+        },
+        downvotes: {
+            type: Number,
+            default: 0,
+        },
+        reviewedBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+        },
+        comments: [
+            {
+                commentText: {
+                    type: String,
+                    required: true,
+                    minlength: 1,
+                },
+                commentAuthor: {
+                    type: Schema.Types.ObjectId,
+                    ref: 'User',
+                    required: true,
+                },
+                createdAt: {
+                    type: Date,
+                    default: Date.now,
+                },
+            },
+        ],
     },
-    reviewAuthor: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    comments: [commentSchema],
-  },
-  {
-    timestamps: true,
-    toJSON: { getters: true },
-    toObject: { getters: true },
-  }
+    {
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+        },
+    }
 );
 
-const Review = model<IReview>('Review', reviewSchema);
+//create goespatial index for efficient location-based queries
+reviewSchema.index({ location: '2dsphere' });
 
+//virtual for calculating upvote/downvote ratio
+reviewSchema.virtual('voteRatio').get(function (this: IReview) {
+    if (this.upvotes === 0 && this.downvotes === 0) return 0;
+    return this.upvotes / (this.upvotes + this.downvotes);
+});
+
+//create and export Reviewsmodel
+const Review = model<IReview>('Review', reviewSchema);
 export default Review;

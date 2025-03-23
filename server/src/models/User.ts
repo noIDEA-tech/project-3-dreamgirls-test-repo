@@ -1,62 +1,69 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model } from 'mongoose';
 import bcrypt from 'bcrypt';
 
-// Define an interface for the User document
-interface IUser extends Document {
-  username: string;
-  email: string;
-  password: string;
-  thoughts: Schema.Types.ObjectId[];
-  isCorrectPassword(password: string): Promise<boolean>;
+//create interface representing a user document
+interface IUser {
+    username: string;
+    email: string;
+    password: string;
+    reports?: Schema.Types.ObjectId[];
+    isPasswordValid(password: string): boolean;
 }
 
-// Define the schema for the User document
+//create schema corresponding to the document interface
 const userSchema = new Schema<IUser>(
-  {
-    username: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
+    {
+        username: {
+            type: String,
+            required: true,
+            unique: true,
+            trim: true,
+        },
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            match: [/.+@.+\..+/, 'Must match an email address!'],
+        },
+        password: {
+            type: String,
+            required: true,
+            minlength: 5,
+        },
+        reports: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: 'Review',
+            },
+        ],
     },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      match: [/.+@.+\..+/, 'Must match an email address!'],
-    },
-    password: {
-      type: String,
-      required: true,
-      minlength: 5,
-    },
-    reviews: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'Review',
-      },
-    ],
-  },
-  {
-    timestamps: true,
-    toJSON: { getters: true },
-    toObject: { getters: true },
-  }
+    {
+       timestamps: true,
+       toJSON: {
+        virtuals: true,
+        //don't include password in JSON responses
+        transform: (_doc: unknown, ret: Partial<IUser>) => {
+            delete ret.password;
+            return ret;
+        },
+      }, 
+    }
 );
 
-userSchema.pre<IUser>('save', async function (next) {
-  if (this.isNew || this.isModified('password')) {
-    const saltRounds = 10;
-    this.password = await bcrypt.hash(this.password, saltRounds);
-  }
-
-  next();
+//hash user passowrd before saving
+userSchema.pre('save', async function (next) {
+    if (this.isNew || this.isModified('password')) {
+        const saltRounds = 10;
+        this.password = await bcrypt.hash(this.password, saltRounds);
+    }
+    next();
 });
 
-userSchema.methods.isCorrectPassword = async function (password: string): Promise<boolean> {
-  return bcrypt.compare(password, this.password);
+//custom method to compare and validate password
+userSchema.methods.isPasswordValid = async function (password: string) {
+    return bcrypt.compare(password, this.password);
 };
 
+//create and export User model
 const User = model<IUser>('User', userSchema);
-
 export default User;
