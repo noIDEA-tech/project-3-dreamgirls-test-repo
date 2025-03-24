@@ -15,7 +15,7 @@ interface AuthContext {
   req: Request;
 }
 
-const secret = process.env.JWT_SECRET || 'mysecretsshhhhh';
+const secret = process.env.JWT_SECRET || '';
 const expiration = '2h';
 
 /**

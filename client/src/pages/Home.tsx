@@ -56,7 +56,15 @@ const Home: React.FC = () => {
           incidents={data?.reviews || []}
         />
       </div>
-
+    {/* Add the selected location info right here, after the map */}
+    {selectedLocation && (
+      <div className="selected-location-info">
+        <h3>Selected Location</h3>
+        <p>{selectedLocation.address}</p>
+        <p>Coordinates: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}</p>
+      </div>
+    )}    
+    
       {loading && <div className="loading">Loading safety reviews...</div>}
       {error && (
         <div className="error-message">

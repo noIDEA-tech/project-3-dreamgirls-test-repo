@@ -58,7 +58,7 @@
     {
       "title": "Busy Intersection with Crossing Guards",
       "description": "School crossing with attentive crossing guards during school hours.",
-      "reviewType": "safe_environment",
+      "reviewType": "other",
       "location": {
         "type": "Point",
         "coordinates": [-77.0369, 38.9072],

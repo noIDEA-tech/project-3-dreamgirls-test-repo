@@ -13,7 +13,7 @@ import Auth from './utils/auth';
 
 // Create an HTTP link for Apollo Client
 const httpLink = createHttpLink({
-  uri: '/graphql',
+  uri: 'http://localhost:3001/graphql',
 });
 
 // Create an auth link to add token to requests
