@@ -40,7 +40,7 @@ const reviewSchema = new Schema<IReview>(
         reviewType: {
             type: String,
             required: true,
-            enum: ['harassment', 'theft', 'assault', 'unsafe_environment', 'other'],
+            enum: ['harassment', 'theft', 'assault', 'unsafe_environment', 'safe_environment', 'other'],
         },
         location: {
             type: {

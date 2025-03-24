@@ -9,6 +9,7 @@ const REVIEW_TYPES = [
   { value: 'theft', label: 'Theft' },
   { value: 'assault', label: 'Assault' },
   { value: 'unsafe_environment', label: 'Unsafe Environment' },
+  { value: 'safe_environment', label: 'Safe Environment' }, // Added this
   { value: 'other', label: 'Other' },
 ];
 

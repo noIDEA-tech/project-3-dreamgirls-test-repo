@@ -12,6 +12,7 @@ node_modules/
 # production //added lines #14-15, 3.15.25 njw
 /build
 client/dist/
+server/dist/
 client/build/
 
 #logs //added logs 3.15.25 njw
